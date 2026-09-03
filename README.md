@@ -38,8 +38,21 @@ npm start          # http://localhost:9000
 
 ## Install into a Staffbase instance
 
-1. Host `dist/chriscelle.collage-media-builder.js` somewhere publicly reachable (any CDN/static host).
-2. In **Staffbase Studio → Settings → Custom widgets**, paste the bundle URL under **Widget Bundle** → **Install**.
+The built bundle is published two ways:
+
+- **Auto-updating (recommended for iteration)** — GitHub Pages, one stable URL that
+  reflects every push within ~10 minutes (no version bump needed):
+  ```
+  https://cdcruz-sbse.github.io/collage-media-builder-widget/dist/chriscelle.collage-media-builder.js
+  ```
+- **Pinned/immutable (recommended for production)** — a tagged jsDelivr URL that never
+  changes under you; bump the tag to upgrade deliberately:
+  ```
+  https://cdn.jsdelivr.net/gh/cdcruz-sbse/collage-media-builder-widget@v0.2.0/dist/chriscelle.collage-media-builder.js
+  ```
+
+1. In **Staffbase Studio → Settings → Custom widgets**, paste one of the bundle URLs above
+   under **Widget Bundle** → **Install**.
 3. Add the "Collage Media Builder" widget to a News post or Page.
 4. In the widget's config dialog, fill in:
    - **API base URL** — e.g. `https://your-tenant.staffbase.com/api`

@@ -17,10 +17,27 @@ declare global {
 
 function readConfig(el: HTMLElement): WidgetConfig {
   return {
-    baseUrl: (el.getAttribute("api-base-url") || "").trim().replace(/\/+$/, ""),
+    baseUrl: normalizeBaseUrl(el.getAttribute("api-base-url") || ""),
     token: (el.getAttribute("api-token") || "").trim(),
     defaultCollectionId: (el.getAttribute("default-collection-id") || "").trim(),
   };
+}
+
+/**
+ * Normalize the configured base URL. Staffbase REST calls live under `/api`,
+ * so if the admin entered only a bare origin (e.g. https://tenant.staffbase.com)
+ * we append `/api`. If they already gave a path (…/api, or a proxy path), we keep it.
+ */
+function normalizeBaseUrl(raw: string): string {
+  let b = raw.trim().replace(/\/+$/, "");
+  if (!b) return b;
+  try {
+    const u = new URL(b);
+    if (u.pathname === "" || u.pathname === "/") b = u.origin + "/api";
+  } catch {
+    /* not a full URL — leave as-is */
+  }
+  return b;
 }
 
 // BlockFactory: (Base, widgetApi) => CustomElementConstructor

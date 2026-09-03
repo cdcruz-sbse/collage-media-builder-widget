@@ -31,18 +31,45 @@ export interface ApiConfig {
 }
 
 function authHeaders(token: string): Record<string, string> {
-  return { Authorization: `Basic ${token}` };
+  return { Authorization: `Basic ${token}`, Accept: "application/json" };
 }
 
 async function ensureOk(res: Response, label: string): Promise<void> {
   if (res.ok) return;
-  let detail = "";
-  try {
-    detail = (await res.text()).slice(0, 300);
-  } catch {
-    /* ignore */
+  throw new Error(`${label} failed — ${describe(res, await safeText(res))}`);
+}
+
+async function safeText(res: Response): Promise<string> {
+  try { return await res.text(); } catch { return ""; }
+}
+
+/** Turn a bad/unexpected response into an actionable message. */
+function describe(res: Response, body: string): string {
+  const ct = res.headers.get("content-type") || "";
+  const looksLikeHtml = ct.includes("text/html") || /^\s*<(?:!doctype|html)/i.test(body);
+  if (looksLikeHtml) {
+    return `the server returned an HTML page (HTTP ${res.status}), not JSON. ` +
+      `Check that the API base URL ends with "/api", and that the API token is valid ` +
+      `(an invalid token gets redirected to a login page).`;
   }
-  throw new Error(`${label} failed (${res.status} ${res.statusText})${detail ? ": " + detail : ""}`);
+  if (res.status === 401 || res.status === 403) {
+    return `authentication was rejected (HTTP ${res.status}). Check the API token and its permissions.`;
+  }
+  return `HTTP ${res.status} ${res.statusText}${body ? ": " + body.slice(0, 200) : ""}`;
+}
+
+/** Read a response as JSON, but fail loudly (and helpfully) if it isn't JSON. */
+async function readJson(res: Response, label: string): Promise<any> {
+  const ct = res.headers.get("content-type") || "";
+  const text = await safeText(res);
+  if (!res.ok || !ct.includes("application/json")) {
+    throw new Error(`${label} failed — ${describe(res, text)}`);
+  }
+  try {
+    return JSON.parse(text);
+  } catch {
+    throw new Error(`${label} failed — the response was not valid JSON.`);
+  }
 }
 
 /** List File Manager collections for the token's branch. */
@@ -50,8 +77,7 @@ export async function listCollections(cfg: ApiConfig): Promise<Collection[]> {
   const res = await fetch(`${cfg.baseUrl}/medialibrary/collections?limit=200`, {
     headers: authHeaders(cfg.token),
   });
-  await ensureOk(res, "Loading collections");
-  const data = await res.json();
+  const data = await readJson(res, "Loading collections");
   return (data.entries || []).map((e: any) => ({
     id: e.id,
     name: e.name,
@@ -74,8 +100,7 @@ export async function uploadMedia(
     headers: authHeaders(cfg.token), // do NOT set Content-Type; the browser sets the multipart boundary
     body: form,
   });
-  await ensureOk(res, "Uploading image");
-  const m = await res.json();
+  const m = await readJson(res, "Uploading image");
   return { id: m.id, url: m?.resourceInfo?.url };
 }
 

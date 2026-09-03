@@ -25,8 +25,10 @@ export const configurationSchema: JSONSchema = {
     },
     "api-token": {
       type: "string",
-      title: "API token",
-      description: "Staffbase API token used for uploads (sent as HTTP Basic auth).",
+      title: "API token (Editorial)",
+      description:
+        "Staffbase EDITORIAL API token (administrative tokens are rejected on File Manager writes). " +
+        "It must have access to the target collection — easiest if that token created the collection.",
     },
     "default-collection-id": {
       type: "string",
@@ -43,7 +45,8 @@ export const uiSchema: UiSchema = {
   "api-token": {
     "ui:widget": "password",
     "ui:help":
-      "⚠ Delivered to the browser at runtime — this is NOT truly secret. Use a scoped token or a backend proxy.",
+      "Use an EDITORIAL token with access to the target collection (admin tokens 403 on File Manager writes). " +
+      "⚠ Delivered to the browser at runtime — not truly secret; prefer a scoped token or a backend proxy.",
   },
   "default-collection-id": {
     "ui:help": "Optional. Leave blank to let users choose a collection when they publish.",

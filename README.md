@@ -43,8 +43,24 @@ npm start          # http://localhost:9000
 3. Add the "Collage Media Builder" widget to a News post or Page.
 4. In the widget's config dialog, fill in:
    - **API base URL** — e.g. `https://your-tenant.staffbase.com/api`
-   - **API token** — a Staffbase API token (used as HTTP Basic auth)
+   - **API token** — a Staffbase **EDITORIAL** token (used as HTTP Basic auth). File Manager
+     writes reject *administrative* tokens with 403, and the token must have access to the target
+     collection — easiest if that same token **created** the collection (it's auto-added to the
+     collection's `adminIds`/`accessorIds`).
    - **Default collection ID** *(optional)* — pre-selects a collection at publish time
+
+### Token scopes (important)
+
+Staffbase "administrative" and "editorial" tokens are **separate scopes, not a hierarchy**:
+
+| Call the widget makes | Required scope |
+|---|---|
+| `POST /media` (upload) | any valid token |
+| `GET /medialibrary/collections` (list) | editorial |
+| `PUT /medialibrary/entries/{id}` (register) | **editorial** |
+| `POST /medialibrary/collections/{id}/entries` (add) | **editorial** + collection admin access |
+
+Use one **editorial** token for the whole flow.
 
 ## API calls it makes (all authenticated with `Authorization: Basic <token>`)
 

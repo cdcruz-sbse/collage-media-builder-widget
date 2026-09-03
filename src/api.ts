@@ -55,8 +55,13 @@ function describe(res: Response, body: string): string {
     return `the server returned an HTML page (HTTP ${res.status})${where}, not JSON.${redir} ` +
       `Confirm the base URL includes "/api" exactly once and the token is a valid Staffbase API token.`;
   }
-  if (res.status === 401 || res.status === 403) {
-    return `authentication was rejected (HTTP ${res.status})${where}. Check the API token and its access level.`;
+  if (res.status === 403) {
+    return `access denied (HTTP 403)${where}. Staffbase File Manager writes require an EDITORIAL API token ` +
+      `(an administrative token is rejected here), and that token must have access to the chosen collection ` +
+      `(easiest if the token created it). Switch the widget's token to an editorial one.`;
+  }
+  if (res.status === 401) {
+    return `authentication failed (HTTP 401)${where}. Check the API token.`;
   }
   return `HTTP ${res.status} ${res.statusText}${where}${body ? ": " + body.slice(0, 200) : ""}`;
 }
@@ -77,16 +82,16 @@ async function readJson(res: Response, label: string): Promise<any> {
 
 /**
  * List File Manager collections.
- * Admin tokens can see every collection via `/medialibrary/collections/all`;
- * editorial tokens only work on `/medialibrary/collections`. We try `/all`
- * first and fall back to the editorial path if it's rejected (401/403).
+ * The whole upload flow needs an EDITORIAL token (writes reject admin tokens),
+ * so we prefer the editorial listing `/medialibrary/collections` (the ones the
+ * token can access) and fall back to the admin-only `/all` if that's rejected.
  */
 export async function listCollections(cfg: ApiConfig): Promise<Collection[]> {
-  let res = await fetch(`${cfg.baseUrl}/medialibrary/collections/all?limit=200`, {
+  let res = await fetch(`${cfg.baseUrl}/medialibrary/collections?limit=200`, {
     headers: authHeaders(cfg.token),
   });
   if (res.status === 401 || res.status === 403) {
-    res = await fetch(`${cfg.baseUrl}/medialibrary/collections?limit=200`, {
+    res = await fetch(`${cfg.baseUrl}/medialibrary/collections/all?limit=200`, {
       headers: authHeaders(cfg.token),
     });
   }

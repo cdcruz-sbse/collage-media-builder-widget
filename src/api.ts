@@ -47,15 +47,18 @@ async function safeText(res: Response): Promise<string> {
 function describe(res: Response, body: string): string {
   const ct = res.headers.get("content-type") || "";
   const looksLikeHtml = ct.includes("text/html") || /^\s*<(?:!doctype|html)/i.test(body);
+  const where = res.url ? ` [${res.url}]` : "";
+  const redir = res.redirected
+    ? ` The request was redirected to ${res.url} — the token was likely rejected and sent to a login page.`
+    : "";
   if (looksLikeHtml) {
-    return `the server returned an HTML page (HTTP ${res.status}), not JSON. ` +
-      `Check that the API base URL ends with "/api", and that the API token is valid ` +
-      `(an invalid token gets redirected to a login page).`;
+    return `the server returned an HTML page (HTTP ${res.status})${where}, not JSON.${redir} ` +
+      `Confirm the base URL includes "/api" exactly once and the token is a valid Staffbase API token.`;
   }
   if (res.status === 401 || res.status === 403) {
-    return `authentication was rejected (HTTP ${res.status}). Check the API token and its permissions.`;
+    return `authentication was rejected (HTTP ${res.status})${where}. Check the API token and its access level.`;
   }
-  return `HTTP ${res.status} ${res.statusText}${body ? ": " + body.slice(0, 200) : ""}`;
+  return `HTTP ${res.status} ${res.statusText}${where}${body ? ": " + body.slice(0, 200) : ""}`;
 }
 
 /** Read a response as JSON, but fail loudly (and helpfully) if it isn't JSON. */
@@ -72,11 +75,21 @@ async function readJson(res: Response, label: string): Promise<any> {
   }
 }
 
-/** List File Manager collections for the token's branch. */
+/**
+ * List File Manager collections.
+ * Admin tokens can see every collection via `/medialibrary/collections/all`;
+ * editorial tokens only work on `/medialibrary/collections`. We try `/all`
+ * first and fall back to the editorial path if it's rejected (401/403).
+ */
 export async function listCollections(cfg: ApiConfig): Promise<Collection[]> {
-  const res = await fetch(`${cfg.baseUrl}/medialibrary/collections?limit=200`, {
+  let res = await fetch(`${cfg.baseUrl}/medialibrary/collections/all?limit=200`, {
     headers: authHeaders(cfg.token),
   });
+  if (res.status === 401 || res.status === 403) {
+    res = await fetch(`${cfg.baseUrl}/medialibrary/collections?limit=200`, {
+      headers: authHeaders(cfg.token),
+    });
+  }
   const data = await readJson(res, "Loading collections");
   return (data.entries || []).map((e: any) => ({
     id: e.id,

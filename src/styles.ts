@@ -111,6 +111,21 @@ input[type="color"] { width:100%; height:36px; padding:2px; border:1px solid var
 /* Persistent template picker inside the left panel */
 .tpl-rail { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
 
+/* Left-panel tabs (Design / Translate) */
+.tabs { display:flex; gap:4px; margin:-4px 0 16px; border-bottom:1px solid var(--color-border); }
+.tab { flex:1; padding:9px 6px; background:none; border:none; border-bottom:2px solid transparent; margin-bottom:-1px; cursor:pointer; font-family:var(--font-body); font-weight:700; font-size:.8rem; color:var(--color-muted); }
+.tab:hover { color:var(--color-text); }
+.tab.active { color:var(--color-accent); border-bottom-color:var(--color-accent); }
+.tabpane.hidden { display:none; }
+
+/* Language switcher chips */
+.lang-chips { display:flex; flex-wrap:wrap; gap:6px; }
+.lang-chip { display:inline-flex; align-items:center; padding:5px 10px; border:1px solid var(--color-border); border-radius:999px; background:#fff; cursor:pointer; font-size:.75rem; font-weight:600; color:var(--color-text); }
+.lang-chip:hover { border-color:var(--color-accent); }
+.lang-chip.active { border-color:var(--color-accent); background:#eafafa; color:var(--color-accent); }
+.lang-chip .x { margin-left:6px; color:var(--color-muted); font-size:.7rem; }
+.lang-chip .x:hover { color:#e5484d; }
+
 .steps { text-align:left; margin:0 0 18px; }
 .step { display:flex; align-items:center; gap:10px; padding:9px 0; font-size:.85rem; }
 .step .dot { width:22px; height:22px; border-radius:50%; flex:0 0 22px; border:2px solid var(--color-border); display:grid; place-items:center; font-size:12px; color:var(--color-muted); }

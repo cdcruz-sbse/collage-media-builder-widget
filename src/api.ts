@@ -66,11 +66,16 @@ function describe(res: Response, body: string): string {
   return `HTTP ${res.status} ${res.statusText}${where}${body ? ": " + body.slice(0, 200) : ""}`;
 }
 
-/** Read a response as JSON, but fail loudly (and helpfully) if it isn't JSON. */
-async function readJson(res: Response, label: string): Promise<any> {
+/**
+ * Read a response as JSON, but fail loudly (and helpfully) if it isn't JSON.
+ * Accepts any "…+json" content type (Staffbase uses vendor media types).
+ * `forbiddenHint` lets a caller give a tailored message for a 403.
+ */
+async function readJson(res: Response, label: string, forbiddenHint?: string): Promise<any> {
   const ct = res.headers.get("content-type") || "";
   const text = await safeText(res);
-  if (!res.ok || !ct.includes("application/json")) {
+  if (!res.ok || !ct.includes("json")) {
+    if (res.status === 403 && forbiddenHint) throw new Error(`${label} failed — ${forbiddenHint}`);
     throw new Error(`${label} failed — ${describe(res, text)}`);
   }
   try {
@@ -120,6 +125,33 @@ export async function uploadMedia(
   });
   const m = await readJson(res, "Uploading image");
   return { id: m.id, url: m?.resourceInfo?.url };
+}
+
+/**
+ * Translate a map of text strings from one language to another via the
+ * Staffbase Translations API. `contents` keys are arbitrary (we use layer ids);
+ * the response echoes the same keys with translated values.
+ * Requires the branch's `content_translation` feature flag (else 403).
+ */
+export async function translateContents(
+  cfg: ApiConfig,
+  contents: Record<string, string>,
+  sourceLanguage: string,
+  targetLanguage: string
+): Promise<Record<string, string>> {
+  const MT = "application/vnd.staffbase.translations.html.v1+json";
+  const res = await fetch(`${cfg.baseUrl}/translations`, {
+    method: "POST",
+    headers: { Authorization: `Basic ${cfg.token}`, "Content-Type": MT, Accept: MT },
+    body: JSON.stringify({ contents, sourceLanguage, targetLanguage }),
+  });
+  const data = await readJson(
+    res,
+    "Translating text",
+    "the translation feature isn't enabled for this branch (or a public-area token was used). " +
+      "Ask an admin to enable the content translation feature flag for the branch."
+  );
+  return (data && data.contents) || {};
 }
 
 /** Register the uploaded medium into the File Manager, then add it to a collection. */

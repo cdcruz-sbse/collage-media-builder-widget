@@ -62,6 +62,20 @@ Staffbase "administrative" and "editorial" tokens are **separate scopes, not a h
 
 Use one **editorial** token for the whole flow.
 
+## Translations (optional)
+
+The **Translate** tab uses the Staffbase Translations API to translate the design's
+text layers into other languages, so one design becomes multilingual signage.
+
+- Endpoint: `POST /api/translations`, media type `application/vnd.staffbase.translations.html.v1+json`
+- Body: `{ contents: { <layerId>: <text> }, sourceLanguage, targetLanguage }` → echoes translated `contents`
+- **Requires the branch's `content_translation` feature flag** (otherwise 403 — the widget says so).
+
+Workflow: pick a source + target language → **Go** translates all text layers and adds a
+language chip. Switch between **Original / <language>** chips; whichever is active is what
+**Download PNG** / **Publish** exports (filename is suffixed with the language code, e.g.
+`collage-de.png`). Switching languages is lossless — the original text is preserved.
+
 ## API calls it makes (all authenticated with `Authorization: Basic <token>`)
 
 | Step | Method & path |

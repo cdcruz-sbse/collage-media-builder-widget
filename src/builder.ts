@@ -1,5 +1,12 @@
 import { CSS } from "./styles";
-import { listCollections, uploadMedia, addToCollection, Collection, ApiConfig } from "./api";
+import { listCollections, uploadMedia, addToCollection, translateContents, Collection, ApiConfig } from "./api";
+
+const LANGS: [string, string][] = [
+  ["en", "English"], ["de", "German"], ["fr", "French"], ["es", "Spanish"],
+  ["it", "Italian"], ["nl", "Dutch"], ["pt", "Portuguese"], ["pl", "Polish"],
+  ["sv", "Swedish"], ["cs", "Czech"], ["ja", "Japanese"], ["zh", "Chinese"],
+  ["ko", "Korean"], ["ru", "Russian"], ["ar", "Arabic"], ["tr", "Turkish"],
+];
 
 export interface WidgetConfig {
   baseUrl: string;
@@ -32,6 +39,11 @@ const APP_HTML = `
   </header>
 
   <aside class="panel left">
+    <div class="tabs" id="leftTabs">
+      <button class="tab active" data-tab="design">Design</button>
+      <button class="tab" data-tab="translate">Translate</button>
+    </div>
+    <div class="tabpane" id="pane-design">
     <div class="section">
       <h2>Templates</h2>
       <div class="stack">
@@ -71,6 +83,30 @@ const APP_HTML = `
     <div class="section">
       <h2>Layers</h2>
       <div class="stack" id="layerList"><span class="layer-empty">No layers yet.</span></div>
+    </div>
+    </div><!-- /pane-design -->
+
+    <div class="tabpane hidden" id="pane-translate">
+      <div class="section">
+        <h2>Translate text</h2>
+        <div class="stack">
+          <label class="field">Source language</label>
+          <select id="srcLang"></select>
+          <label class="field">Translate to…</label>
+          <div class="row">
+            <select id="tgtLang" style="flex:1"></select>
+            <button class="btn primary" id="btnTranslate">Go</button>
+          </div>
+          <p class="muted-note" id="translateStatus"></p>
+        </div>
+      </div>
+      <div class="section">
+        <h2>Show language</h2>
+        <div class="stack">
+          <div class="lang-chips" id="langChips"><span class="layer-empty">Translate to add languages.</span></div>
+          <p class="muted-note">Switch languages, then Download or Publish to export that version. Uses the Staffbase translation service — requires the branch's content&nbsp;translation feature.</p>
+        </div>
+      </div>
     </div>
   </aside>
 
@@ -210,6 +246,11 @@ export function mountCollageBuilder(container: HTMLElement, cfg: WidgetConfig): 
   let uid = 0;
   let pendingSlotId: number | null = null;
 
+  // Translation state
+  let originalTexts: Record<number, string> | null = null;      // snapshot of source-language text per layer id
+  const translationsCache: Record<string, Record<number, string>> = {}; // lang -> {layerId: text}
+  let activeLang: string | null = null;                          // null = original/source
+
   // ---- layout ----
   function layoutStage() {
     const wrap = stage.parentElement!.parentElement as HTMLElement;
@@ -239,7 +280,7 @@ export function mountCollageBuilder(container: HTMLElement, cfg: WidgetConfig): 
     bg = tpl.bg; stage.style.background = bg;
     ($("#bgColor") as HTMLInputElement).value = bg;
     layers = tpl.layers.map((l: any) => Object.assign({ id: ++uid }, JSON.parse(JSON.stringify(l))));
-    selectedId = null; renderLayers(); renderLayerList(); showProps();
+    selectedId = null; resetTranslations(); renderLayers(); renderLayerList(); showProps();
   }
 
   // ---- render ----
@@ -557,7 +598,7 @@ export function mountCollageBuilder(container: HTMLElement, cfg: WidgetConfig): 
     catch (e: any) { openModal(errorMarkup("Couldn’t render the image", e?.message || String(e))); wireModalClose(); return; }
     try {
       setStep("upload", "active");
-      const media = await uploadMedia(apiCfg, blob, `collage-${Date.now()}.png`);
+      const media = await uploadMedia(apiCfg, blob, `collage${activeLang ? "-" + activeLang : ""}-${Date.now()}.png`);
       setStep("upload", "done"); setStep("collection", "active");
       await addToCollection(apiCfg, collectionId, media.id);
       setStep("collection", "done");
@@ -643,11 +684,82 @@ export function mountCollageBuilder(container: HTMLElement, cfg: WidgetConfig): 
   }
   modal.addEventListener("click", (e) => { if (e.target === modal) closeModal(); });
 
+  function fileNameFor() { return `collage${activeLang ? "-" + activeLang : ""}.png`; }
+
   async function download() {
     if (!layers.length) return;
     const blob = await renderToCanvas();
     const a = document.createElement("a");
-    a.href = URL.createObjectURL(blob); a.download = "collage.png"; a.click();
+    a.href = URL.createObjectURL(blob); a.download = fileNameFor(); a.click();
+  }
+
+  // ---- translation ----
+  function textLayers() { return layers.filter((l) => l.type === "text"); }
+  function langName(code: string) { return (LANGS.find((l) => l[0] === code) || [code, code])[1]; }
+  function setTranslateStatus(msg: string) { $("#translateStatus").textContent = msg; }
+  function resetTranslations() {
+    originalTexts = null;
+    Object.keys(translationsCache).forEach((k) => delete translationsCache[k]);
+    activeLang = null;
+    renderLangChips();
+  }
+
+  async function translateTo(targetLang: string) {
+    const tl = textLayers();
+    if (!tl.length) { setTranslateStatus("Add some text layers first."); return; }
+    if (!configured) { setTranslateStatus("Set the API base URL and token in the widget settings first."); return; }
+    const src = ($("#srcLang") as HTMLSelectElement).value;
+    if (targetLang === src) { setTranslateStatus("Target language matches the source language."); return; }
+    // Snapshot the source text once, so switching back to "Original" is lossless.
+    if (!originalTexts) { originalTexts = {}; tl.forEach((l) => (originalTexts![l.id] = l.text)); }
+    const contents: Record<string, string> = {};
+    tl.forEach((l) => (contents[String(l.id)] = originalTexts![l.id] ?? l.text));
+
+    const btn = $("#btnTranslate") as HTMLButtonElement;
+    btn.disabled = true; setTranslateStatus(`Translating to ${langName(targetLang)}…`);
+    try {
+      const out = await translateContents(apiCfg, contents, src, targetLang);
+      const mapped: Record<number, string> = {};
+      Object.keys(out).forEach((k) => (mapped[Number(k)] = out[k]));
+      translationsCache[targetLang] = mapped;
+      setTranslateStatus("");
+      applyLang(targetLang);
+    } catch (e: any) {
+      setTranslateStatus(e?.message || String(e));
+    } finally {
+      btn.disabled = false;
+    }
+  }
+
+  function applyLang(lang: string | null) {
+    activeLang = lang;
+    const map = lang ? translationsCache[lang] : originalTexts;
+    if (map) layers.forEach((l) => { if (l.type === "text" && map[l.id] != null) l.text = map[l.id]; });
+    renderLayers(); renderLayerList(); renderLangChips();
+    if (selectedId != null) showProps();
+  }
+
+  function renderLangChips() {
+    const wrap = $("#langChips");
+    const langs = Object.keys(translationsCache);
+    if (!langs.length) { wrap.innerHTML = '<span class="layer-empty">Translate to add languages.</span>'; return; }
+    let html = `<button class="lang-chip ${activeLang === null ? "active" : ""}" data-lang="">Original</button>`;
+    html += langs.map((c) =>
+      `<button class="lang-chip ${activeLang === c ? "active" : ""}" data-lang="${c}">${escapeHtml(langName(c))}<span class="x" data-del="${c}">✕</span></button>`
+    ).join("");
+    wrap.innerHTML = html;
+    wrap.querySelectorAll(".lang-chip").forEach((ch) =>
+      ch.addEventListener("click", (e) => {
+        const t = e.target as HTMLElement;
+        if (t.dataset.del) {
+          e.stopPropagation();
+          delete translationsCache[t.dataset.del];
+          if (activeLang === t.dataset.del) applyLang(null); else renderLangChips();
+          return;
+        }
+        applyLang((ch as HTMLElement).dataset.lang || null);
+      })
+    );
   }
 
   // ---- wire up ----
@@ -728,7 +840,27 @@ export function mountCollageBuilder(container: HTMLElement, cfg: WidgetConfig): 
 
   $("#btnDownload").addEventListener("click", download);
   $("#btnPublish").addEventListener("click", publish);
-  $("#btnReset").addEventListener("click", () => { layers = []; selectedId = null; markActiveTemplate(""); renderLayers(); renderLayerList(); showProps(); });
+  $("#btnReset").addEventListener("click", () => { layers = []; selectedId = null; markActiveTemplate(""); resetTranslations(); renderLayers(); renderLayerList(); showProps(); });
+
+  // Left-panel tabs (Design / Translate)
+  $$("#leftTabs .tab").forEach((t) =>
+    t.addEventListener("click", () => {
+      $$("#leftTabs .tab").forEach((x) => x.classList.toggle("active", x === t));
+      const tab = t.dataset.tab;
+      $("#pane-design").classList.toggle("hidden", tab !== "design");
+      $("#pane-translate").classList.toggle("hidden", tab !== "translate");
+    })
+  );
+
+  // Translation controls
+  (function populateLangs() {
+    const opts = LANGS.map(([c, n]) => `<option value="${c}">${n}</option>`).join("");
+    ($("#srcLang") as HTMLSelectElement).innerHTML = opts;
+    ($("#tgtLang") as HTMLSelectElement).innerHTML = opts;
+    ($("#srcLang") as HTMLSelectElement).value = "en";
+    ($("#tgtLang") as HTMLSelectElement).value = "de";
+  })();
+  $("#btnTranslate").addEventListener("click", () => translateTo(($("#tgtLang") as HTMLSelectElement).value));
 
   stage.addEventListener("pointerdown", (e) => { if (e.target === stage) { selectedId = null; renderLayers(); renderLayerList(); showProps(); } });
 
@@ -737,5 +869,6 @@ export function mountCollageBuilder(container: HTMLElement, cfg: WidgetConfig): 
 
   // init
   buildRail();
+  renderLangChips();
   layoutStage();
 }

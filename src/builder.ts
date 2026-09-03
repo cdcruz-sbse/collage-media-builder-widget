@@ -10,6 +10,7 @@ export interface WidgetConfig {
 type Layer = any;
 
 const APP_HTML = `
+<div class="root">
 <div class="app">
   <header class="app-header">
     <div class="brand">
@@ -32,13 +33,10 @@ const APP_HTML = `
 
   <aside class="panel left">
     <div class="section">
-      <h2>Template</h2>
+      <h2>Templates</h2>
       <div class="stack">
-        <button class="btn primary block" id="btnTemplates">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
-          Browse templates
-        </button>
         <span class="pill">Landscape &middot; 1920 &times; 1080</span>
+        <div class="tpl-rail" id="tplRail"></div>
       </div>
     </div>
     <div class="section">
@@ -81,8 +79,7 @@ const APP_HTML = `
       <div class="stage" id="stage">
         <div class="empty-hint" id="emptyHint">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
-          <span>Start from a layout template</span>
-          <button class="btn primary" id="btnEmptyTemplates">Browse templates</button>
+          <span>Pick a layout from the <strong>Templates</strong> panel&nbsp;&larr;<br>or add photos and text manually.</span>
         </div>
       </div>
     </div>
@@ -139,15 +136,8 @@ const APP_HTML = `
   </aside>
 </div>
 
-<div class="modal-overlay hidden" id="tplModal">
-  <div class="modal wide">
-    <div class="tpl-head"><h3>Choose a layout</h3><span class="pill">Landscape 1920 &times; 1080</span><button class="tpl-close" id="tplClose">✕</button></div>
-    <p style="margin-bottom:16px">Pick a starting layout, then swap in your photos and text. Photo slots are placeholders you click to fill.</p>
-    <div class="tpl-grid" id="tplGrid"></div>
-  </div>
-</div>
-
 <div class="modal-overlay hidden" id="modal"><div class="modal" id="modalBody"></div></div>
+</div>
 `;
 
 // ---- Templates (landscape layout patterns) ------------------------------
@@ -436,18 +426,19 @@ export function mountCollageBuilder(container: HTMLElement, cfg: WidgetConfig): 
     });
     return s + "</svg>";
   }
-  function buildGallery() {
-    const grid = $("#tplGrid"); grid.innerHTML = "";
+  function buildRail() {
+    const rail = $("#tplRail"); rail.innerHTML = "";
     TEMPLATES.forEach((tpl) => {
       const card = document.createElement("div");
-      card.className = "tpl-card";
-      card.innerHTML = renderThumb(tpl, 150) + `<div class="name">${escapeHtml(tpl.name)}</div>`;
-      card.addEventListener("click", () => { applyTemplate(tpl); closeTemplates(); });
-      grid.appendChild(card);
+      card.className = "tpl-card"; card.dataset.tpl = tpl.id;
+      card.innerHTML = renderThumb(tpl, 120) + `<div class="name">${escapeHtml(tpl.name)}</div>`;
+      card.addEventListener("click", () => { applyTemplate(tpl); markActiveTemplate(tpl.id); });
+      rail.appendChild(card);
     });
   }
-  function openTemplates() { $("#tplModal").classList.remove("hidden"); }
-  function closeTemplates() { $("#tplModal").classList.add("hidden"); }
+  function markActiveTemplate(id: string) {
+    $$("#tplRail .tpl-card").forEach((c) => c.classList.toggle("active", c.dataset.tpl === id));
+  }
 
   // ---- export to canvas ----
   function renderToCanvas(): Promise<Blob> {
@@ -660,11 +651,6 @@ export function mountCollageBuilder(container: HTMLElement, cfg: WidgetConfig): 
   }
 
   // ---- wire up ----
-  $("#btnTemplates").addEventListener("click", openTemplates);
-  $("#btnEmptyTemplates").addEventListener("click", openTemplates);
-  $("#tplClose").addEventListener("click", closeTemplates);
-  $("#tplModal").addEventListener("click", (e) => { if ((e.target as HTMLElement).id === "tplModal") closeTemplates(); });
-
   ($("#bgColor") as HTMLInputElement).addEventListener("input", (e) => { bg = (e.target as HTMLInputElement).value; stage.style.background = bg; });
   $$(".swatch").forEach((s) => s.addEventListener("click", () => { bg = s.dataset.c!; stage.style.background = bg; ($("#bgColor") as HTMLInputElement).value = bg; }));
 
@@ -742,7 +728,7 @@ export function mountCollageBuilder(container: HTMLElement, cfg: WidgetConfig): 
 
   $("#btnDownload").addEventListener("click", download);
   $("#btnPublish").addEventListener("click", publish);
-  $("#btnReset").addEventListener("click", () => { layers = []; selectedId = null; renderLayers(); renderLayerList(); showProps(); });
+  $("#btnReset").addEventListener("click", () => { layers = []; selectedId = null; markActiveTemplate(""); renderLayers(); renderLayerList(); showProps(); });
 
   stage.addEventListener("pointerdown", (e) => { if (e.target === stage) { selectedId = null; renderLayers(); renderLayerList(); showProps(); } });
 
@@ -750,6 +736,6 @@ export function mountCollageBuilder(container: HTMLElement, cfg: WidgetConfig): 
   ro.observe(container);
 
   // init
-  buildGallery();
+  buildRail();
   layoutStage();
 }

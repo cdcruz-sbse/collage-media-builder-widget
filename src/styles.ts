@@ -16,6 +16,7 @@ export const CSS = `
   -webkit-font-smoothing:antialiased;
 }
 * { box-sizing:border-box; }
+.root { position:relative; }
 
 .app {
   background:var(--color-surface); border:1px solid var(--color-border);
@@ -87,7 +88,9 @@ input[type="color"] { width:100%; height:36px; padding:2px; border:1px solid var
 
 .hidden { display:none !important; }
 
-.modal-overlay { position:fixed; inset:0; background:rgba(11,46,51,0.55); display:flex; align-items:center; justify-content:center; z-index:2147483000; padding:20px; }
+/* Anchored to the widget (.root is position:relative), NOT the viewport —
+   avoids position:fixed breaking when an ancestor page element has a transform. */
+.modal-overlay { position:absolute; inset:0; background:rgba(11,46,51,0.55); display:flex; align-items:center; justify-content:center; z-index:2147483000; padding:20px; }
 .modal { background:#fff; border-radius:var(--radius); box-shadow:var(--shadow); width:100%; max-width:460px; padding:24px; text-align:center; }
 .modal.wide { max-width:720px; text-align:left; }
 .modal h3 { font-family:var(--font-heading); margin:0 0 6px; }
@@ -101,8 +104,12 @@ input[type="color"] { width:100%; height:36px; padding:2px; border:1px solid var
 @media (max-width:640px){ .tpl-grid { grid-template-columns:repeat(2,1fr);} }
 .tpl-card { cursor:pointer; border:1px solid var(--color-border); border-radius:var(--radius-sm); overflow:hidden; background:#fff; transition:all .15s; }
 .tpl-card:hover { border-color:var(--color-accent); box-shadow:var(--shadow-sm); transform:translateY(-2px); }
-.tpl-card .thumb { width:100%; display:block; background:#f0f0f0; }
-.tpl-card .name { padding:7px 9px; font-size:.72rem; font-weight:600; color:var(--color-text); }
+.tpl-card.active { border-color:var(--color-accent); box-shadow:0 0 0 1px var(--color-accent) inset; }
+.tpl-card .thumb { width:100%; height:auto; display:block; background:#f0f0f0; }
+.tpl-card .name { padding:6px 8px; font-size:.68rem; font-weight:600; color:var(--color-text); line-height:1.2; }
+
+/* Persistent template picker inside the left panel */
+.tpl-rail { display:grid; grid-template-columns:1fr 1fr; gap:8px; }
 
 .steps { text-align:left; margin:0 0 18px; }
 .step { display:flex; align-items:center; gap:10px; padding:9px 0; font-size:.85rem; }

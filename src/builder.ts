@@ -104,7 +104,7 @@ const APP_HTML = `
         <h2>Show language</h2>
         <div class="stack">
           <div class="lang-chips" id="langChips"><span class="layer-empty">Translate to add languages.</span></div>
-          <p class="muted-note">Switch languages, then Download or Publish to export that version. Uses the Staffbase translation service — requires the branch's content&nbsp;translation feature.</p>
+          <p class="muted-note">Switch languages, then Download or Publish to export that version. Translation uses your Staffbase sign-in, so it only works inside the Staffbase app (not a standalone preview) with the branch's content&nbsp;translation feature enabled.</p>
         </div>
       </div>
     </div>

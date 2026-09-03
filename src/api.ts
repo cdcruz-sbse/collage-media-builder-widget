@@ -140,16 +140,24 @@ export async function translateContents(
   targetLanguage: string
 ): Promise<Record<string, string>> {
   const MT = "application/vnd.staffbase.translations.html.v1+json";
+  // IMPORTANT: /api/translations is Staffbase's INTERNAL front-end endpoint (not a
+  // public REST API). It authenticates via the logged-in user's SESSION, not a Basic
+  // API token — sending an API token makes it evaluate the caller as the anonymous
+  // "public area" and returns 403. So we send NO Authorization header and include
+  // credentials, letting the request ride the user's session (the widget is same-origin
+  // inside the authenticated Staffbase app). This only works when opened while signed in.
   const res = await fetch(`${cfg.baseUrl}/translations`, {
     method: "POST",
-    headers: { Authorization: `Basic ${cfg.token}`, "Content-Type": MT, Accept: MT },
+    credentials: "include",
+    headers: { "Content-Type": MT, Accept: MT },
     body: JSON.stringify({ contents, sourceLanguage, targetLanguage }),
   });
   const data = await readJson(
     res,
     "Translating text",
-    "the translation feature isn't enabled for this branch (or a public-area token was used). " +
-      "Ask an admin to enable the content translation feature flag for the branch."
+    "the translation service rejected the request (403). It runs on your Staffbase login session, " +
+      "so open the widget while signed in to Staffbase (it won't work in a standalone preview), " +
+      "and make sure the branch's content translation feature is enabled."
   );
   return (data && data.contents) || {};
 }

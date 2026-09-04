@@ -127,40 +127,11 @@ export async function uploadMedia(
   return { id: m.id, url: m?.resourceInfo?.url };
 }
 
-/**
- * Translate a map of text strings from one language to another via the
- * Staffbase Translations API. `contents` keys are arbitrary (we use layer ids);
- * the response echoes the same keys with translated values.
- * Requires the branch's `content_translation` feature flag (else 403).
- */
-export async function translateContents(
-  cfg: ApiConfig,
-  contents: Record<string, string>,
-  sourceLanguage: string,
-  targetLanguage: string
-): Promise<Record<string, string>> {
-  const MT = "application/vnd.staffbase.translations.html.v1+json";
-  // IMPORTANT: /api/translations is Staffbase's INTERNAL front-end endpoint (not a
-  // public REST API). It authenticates via the logged-in user's SESSION, not a Basic
-  // API token — sending an API token makes it evaluate the caller as the anonymous
-  // "public area" and returns 403. So we send NO Authorization header and include
-  // credentials, letting the request ride the user's session (the widget is same-origin
-  // inside the authenticated Staffbase app). This only works when opened while signed in.
-  const res = await fetch(`${cfg.baseUrl}/translations`, {
-    method: "POST",
-    credentials: "include",
-    headers: { "Content-Type": MT, Accept: MT },
-    body: JSON.stringify({ contents, sourceLanguage, targetLanguage }),
-  });
-  const data = await readJson(
-    res,
-    "Translating text",
-    "the translation service rejected the request (403). It runs on your Staffbase login session, " +
-      "so open the widget while signed in to Staffbase (it won't work in a standalone preview), " +
-      "and make sure the branch's content translation feature is enabled."
-  );
-  return (data && data.contents) || {};
-}
+// NOTE: Staffbase's /api/translations is an internal front-end endpoint that only
+// authenticates from a logged-in user session (not an API token) and is undocumented,
+// so it isn't a viable call from a custom widget. Translation is handled manually in
+// the UI for now; a backend proxy → a real translation provider (DeepL/Azure/Google)
+// is the sustainable path if/when auto-translation is needed.
 
 /** Register the uploaded medium into the File Manager, then add it to a collection. */
 export async function addToCollection(

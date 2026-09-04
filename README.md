@@ -75,19 +75,22 @@ Staffbase "administrative" and "editorial" tokens are **separate scopes, not a h
 
 Use one **editorial** token for the whole flow.
 
-## Translations (optional)
+## Languages (manual, multi-language)
 
-The **Translate** tab uses the Staffbase Translations API to translate the design's
-text layers into other languages, so one design becomes multilingual signage.
+The **Translate** tab lets one design carry multiple languages. It's **manual** — you enter
+each language's wording yourself — so it needs no backend and works anywhere.
 
-- Endpoint: `POST /api/translations`, media type `application/vnd.staffbase.translations.html.v1+json`
-- Body: `{ contents: { <layerId>: <text> }, sourceLanguage, targetLanguage }` → echoes translated `contents`
-- **Requires the branch's `content_translation` feature flag** (otherwise 403 — the widget says so).
+Workflow: pick a source language (labels "Original") → **Add a language** creates a variant
+(seeded from the original text) and a language chip. Select a chip, then click a text layer
+and edit its wording for that language. Switch between **Original / <language>** chips;
+whichever is active is what **Download PNG** / **Publish** exports (filename suffixed, e.g.
+`collage-de.png`). Original stays intact.
 
-Workflow: pick a source + target language → **Go** translates all text layers and adds a
-language chip. Switch between **Original / <language>** chips; whichever is active is what
-**Download PNG** / **Publish** exports (filename is suffixed with the language code, e.g.
-`collage-de.png`). Switching languages is lossless — the original text is preserved.
+> Why manual: Staffbase's `/api/translations` is an internal front-end endpoint (not a public
+> API) that only authenticates from a logged-in user session — a custom widget can't call it
+> reliably (returns 403). For **automatic** translation, put a small backend proxy in front of a
+> real provider (DeepL / Azure / Google) and call that from the widget; `src/api.ts` is the place
+> to add a `translate()` that hits your proxy.
 
 ## API calls it makes (all authenticated with `Authorization: Basic <token>`)
 

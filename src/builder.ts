@@ -1,5 +1,5 @@
 import { CSS } from "./styles";
-import { listCollections, uploadMedia, addToCollection, translateContents, Collection, ApiConfig } from "./api";
+import { listCollections, uploadMedia, addToCollection, Collection, ApiConfig } from "./api";
 
 const LANGS: [string, string][] = [
   ["en", "English"], ["de", "German"], ["fr", "French"], ["es", "Spanish"],
@@ -88,14 +88,14 @@ const APP_HTML = `
 
     <div class="tabpane hidden" id="pane-translate">
       <div class="section">
-        <h2>Translate text</h2>
+        <h2>Languages</h2>
         <div class="stack">
-          <label class="field">Source language</label>
+          <label class="field">Source language (Original)</label>
           <select id="srcLang"></select>
-          <label class="field">Translate to…</label>
+          <label class="field">Add a language</label>
           <div class="row">
             <select id="tgtLang" style="flex:1"></select>
-            <button class="btn primary" id="btnTranslate">Go</button>
+            <button class="btn primary" id="btnAddLang">Add</button>
           </div>
           <p class="muted-note" id="translateStatus"></p>
         </div>
@@ -103,8 +103,8 @@ const APP_HTML = `
       <div class="section">
         <h2>Show language</h2>
         <div class="stack">
-          <div class="lang-chips" id="langChips"><span class="layer-empty">Translate to add languages.</span></div>
-          <p class="muted-note">Switch languages, then Download or Publish to export that version. Translation uses your Staffbase sign-in, so it only works inside the Staffbase app (not a standalone preview) with the branch's content&nbsp;translation feature enabled.</p>
+          <div class="lang-chips" id="langChips"><span class="layer-empty">Add a language to start.</span></div>
+          <p class="muted-note">Pick a language chip, then select a text layer and edit its wording for that language. Whichever language is active is what Download / Publish exports (filename suffixed, e.g. collage-de.png). Original stays intact.</p>
         </div>
       </div>
     </div>
@@ -246,9 +246,9 @@ export function mountCollageBuilder(container: HTMLElement, cfg: WidgetConfig): 
   let uid = 0;
   let pendingSlotId: number | null = null;
 
-  // Translation state
-  let originalTexts: Record<number, string> | null = null;      // snapshot of source-language text per layer id
-  const translationsCache: Record<string, Record<number, string>> = {}; // lang -> {layerId: text}
+  // Language state (manual multi-language text entry)
+  let originalTexts: Record<number, string> | null = null;      // source-language text per layer id
+  const variants: Record<string, Record<number, string>> = {};  // lang -> {layerId: text}
   let activeLang: string | null = null;                          // null = original/source
 
   // ---- layout ----
@@ -432,6 +432,7 @@ export function mountCollageBuilder(container: HTMLElement, cfg: WidgetConfig): 
     try { document.execCommand("selectAll", false); } catch {}
     const finish = () => {
       t.contentEditable = "false"; layer.text = t.textContent || "";
+      persistActiveText(layer);
       renderLayerList();
       if (selectedId === layer.id) ($("#txtContent") as HTMLTextAreaElement).value = layer.text;
       t.removeEventListener("blur", finish);
@@ -693,56 +694,57 @@ export function mountCollageBuilder(container: HTMLElement, cfg: WidgetConfig): 
     a.href = URL.createObjectURL(blob); a.download = fileNameFor(); a.click();
   }
 
-  // ---- translation ----
+  // ---- languages (manual multi-language text) ----
   function textLayers() { return layers.filter((l) => l.type === "text"); }
   function langName(code: string) { return (LANGS.find((l) => l[0] === code) || [code, code])[1]; }
   function setTranslateStatus(msg: string) { $("#translateStatus").textContent = msg; }
   function resetTranslations() {
     originalTexts = null;
-    Object.keys(translationsCache).forEach((k) => delete translationsCache[k]);
+    Object.keys(variants).forEach((k) => delete variants[k]);
     activeLang = null;
     renderLangChips();
   }
 
-  async function translateTo(targetLang: string) {
-    const tl = textLayers();
-    if (!tl.length) { setTranslateStatus("Add some text layers first."); return; }
-    if (!configured) { setTranslateStatus("Set the API base URL and token in the widget settings first."); return; }
-    const src = ($("#srcLang") as HTMLSelectElement).value;
-    if (targetLang === src) { setTranslateStatus("Target language matches the source language."); return; }
-    // Snapshot the source text once, so switching back to "Original" is lossless.
-    if (!originalTexts) { originalTexts = {}; tl.forEach((l) => (originalTexts![l.id] = l.text)); }
-    const contents: Record<string, string> = {};
-    tl.forEach((l) => (contents[String(l.id)] = originalTexts![l.id] ?? l.text));
+  // Snapshot the source-language text once, so switching back to Original is lossless.
+  function ensureBase() {
+    if (!originalTexts) { originalTexts = {}; textLayers().forEach((l) => (originalTexts![l.id] = l.text)); }
+  }
 
-    const btn = $("#btnTranslate") as HTMLButtonElement;
-    btn.disabled = true; setTranslateStatus(`Translating to ${langName(targetLang)}…`);
-    try {
-      const out = await translateContents(apiCfg, contents, src, targetLang);
-      const mapped: Record<number, string> = {};
-      Object.keys(out).forEach((k) => (mapped[Number(k)] = out[k]));
-      translationsCache[targetLang] = mapped;
-      setTranslateStatus("");
-      applyLang(targetLang);
-    } catch (e: any) {
-      setTranslateStatus(e?.message || String(e));
-    } finally {
-      btn.disabled = false;
+  function addLanguage(lang: string) {
+    if (!textLayers().length) { setTranslateStatus("Add some text layers first."); return; }
+    const src = ($("#srcLang") as HTMLSelectElement).value;
+    if (lang === src) { setTranslateStatus("That's the source language already."); return; }
+    ensureBase();
+    if (!variants[lang]) {
+      // seed each layer from the original text so it's a starting point to edit
+      variants[lang] = {};
+      textLayers().forEach((l) => (variants[lang][l.id] = originalTexts![l.id] ?? l.text));
     }
+    applyLang(lang);
+    setTranslateStatus(`Editing ${langName(lang)} — select a text layer and edit its wording.`);
+  }
+
+  // Persist the current text of a layer into whichever language is active.
+  function persistActiveText(layer: any) {
+    if (!originalTexts || layer.type !== "text") return; // no languages yet → nothing to track
+    if (activeLang) (variants[activeLang] || (variants[activeLang] = {}))[layer.id] = layer.text;
+    else originalTexts[layer.id] = layer.text;
   }
 
   function applyLang(lang: string | null) {
     activeLang = lang;
-    const map = lang ? translationsCache[lang] : originalTexts;
-    if (map) layers.forEach((l) => { if (l.type === "text" && map[l.id] != null) l.text = map[l.id]; });
+    const store = lang ? variants[lang] : originalTexts;
+    if (store) layers.forEach((l) => {
+      if (l.type === "text") l.text = store[l.id] != null ? store[l.id] : (originalTexts ? originalTexts[l.id] ?? l.text : l.text);
+    });
     renderLayers(); renderLayerList(); renderLangChips();
     if (selectedId != null) showProps();
   }
 
   function renderLangChips() {
     const wrap = $("#langChips");
-    const langs = Object.keys(translationsCache);
-    if (!langs.length) { wrap.innerHTML = '<span class="layer-empty">Translate to add languages.</span>'; return; }
+    const langs = Object.keys(variants);
+    if (!langs.length) { wrap.innerHTML = '<span class="layer-empty">Add a language to start.</span>'; return; }
     let html = `<button class="lang-chip ${activeLang === null ? "active" : ""}" data-lang="">Original</button>`;
     html += langs.map((c) =>
       `<button class="lang-chip ${activeLang === c ? "active" : ""}" data-lang="${c}">${escapeHtml(langName(c))}<span class="x" data-del="${c}">✕</span></button>`
@@ -753,7 +755,7 @@ export function mountCollageBuilder(container: HTMLElement, cfg: WidgetConfig): 
         const t = e.target as HTMLElement;
         if (t.dataset.del) {
           e.stopPropagation();
-          delete translationsCache[t.dataset.del];
+          delete variants[t.dataset.del];
           if (activeLang === t.dataset.del) applyLang(null); else renderLangChips();
           return;
         }
@@ -795,7 +797,7 @@ export function mountCollageBuilder(container: HTMLElement, cfg: WidgetConfig): 
 
   const bindText = (id: string, fn: (l: any, v: string) => void) =>
     $(id).addEventListener("input", (e: any) => { const layer = layers.find((l) => l.id === selectedId); if (!layer || layer.type !== "text") return; fn(layer, e.target.value); renderLayers(); renderLayerList(); });
-  bindText("#txtContent", (l, v) => (l.text = v));
+  bindText("#txtContent", (l, v) => { l.text = v; persistActiveText(l); });
   bindText("#txtFont", (l, v) => (l.font = v));
   bindText("#txtColor", (l, v) => (l.color = v));
   bindText("#txtBg", (l, v) => (l.bgColor = v));
@@ -860,7 +862,7 @@ export function mountCollageBuilder(container: HTMLElement, cfg: WidgetConfig): 
     ($("#srcLang") as HTMLSelectElement).value = "en";
     ($("#tgtLang") as HTMLSelectElement).value = "de";
   })();
-  $("#btnTranslate").addEventListener("click", () => translateTo(($("#tgtLang") as HTMLSelectElement).value));
+  $("#btnAddLang").addEventListener("click", () => addLanguage(($("#tgtLang") as HTMLSelectElement).value));
 
   stage.addEventListener("pointerdown", (e) => { if (e.target === stage) { selectedId = null; renderLayers(); renderLayerList(); showProps(); } });
 

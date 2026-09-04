@@ -1,5 +1,5 @@
 import { CSS } from "./styles";
-import { listCollections, uploadMedia, addToCollection, Collection, ApiConfig } from "./api";
+import { listCollections, uploadMedia, addToCollection, createCollection, Collection, ApiConfig } from "./api";
 
 const LANGS: [string, string][] = [
   ["en", "English"], ["de", "German"], ["fr", "French"], ["es", "Spanish"],
@@ -573,22 +573,51 @@ export function mountCollageBuilder(container: HTMLElement, cfg: WidgetConfig): 
     }
   }
 
+  function setChooserStatus(msg: string) { const el = $("#chooserStatus"); if (el) el.textContent = msg; }
+
+  function fillCollectionOptions(select: HTMLSelectElement, cols: Collection[]) {
+    select.innerHTML = cols.length
+      ? cols.map((c) => `<option value="${c.id}">${escapeHtml(c.name)}${c.mediumCount != null ? " (" + c.mediumCount + ")" : ""}</option>`).join("")
+      : `<option value="">No collections found</option>`;
+    if (cfg.defaultCollectionId && cols.some((c) => c.id === cfg.defaultCollectionId)) select.value = cfg.defaultCollectionId;
+  }
+
   function renderCollectionChooser(cols: Collection[]) {
     const select = $("#collectionSelect") as HTMLSelectElement | null;
     const loading = $("#collLoading");
     if (loading) loading.classList.add("hidden");
     if (!select) return;
     select.classList.remove("hidden");
-    select.innerHTML = cols.length
-      ? cols.map((c) => `<option value="${c.id}">${escapeHtml(c.name)}${c.mediumCount != null ? " (" + c.mediumCount + ")" : ""}</option>`).join("")
-      : `<option value="">No collections found</option>`;
-    if (cfg.defaultCollectionId && cols.some((c) => c.id === cfg.defaultCollectionId)) select.value = cfg.defaultCollectionId;
+    fillCollectionOptions(select, cols);
+
     const confirm = $("#confirmUpload") as HTMLButtonElement;
     confirm.disabled = !cols.length;
     confirm.addEventListener("click", () => {
       const id = select.value;
       const name = cols.find((c) => c.id === id)?.name || "collection";
       if (id) doUpload(id, name);
+    });
+
+    // Create a new collection (guaranteed writable by this token)
+    const createBtn = $("#createCollBtn") as HTMLButtonElement;
+    const nameInput = $("#newCollName") as HTMLInputElement;
+    createBtn.addEventListener("click", async () => {
+      const name = nameInput.value.trim();
+      if (!name) { setChooserStatus("Enter a name for the new collection."); return; }
+      createBtn.disabled = true; setChooserStatus("Creating…");
+      try {
+        const c = await createCollection(apiCfg, name);
+        cols.unshift(c); collections = cols;
+        fillCollectionOptions(select, cols);
+        select.value = c.id;
+        confirm.disabled = false;
+        nameInput.value = "";
+        setChooserStatus(`Created “${c.name}” ✓ — selected as the destination.`);
+      } catch (e: any) {
+        setChooserStatus(e?.message || String(e));
+      } finally {
+        createBtn.disabled = false;
+      }
     });
   }
 
@@ -621,8 +650,13 @@ export function mountCollageBuilder(container: HTMLElement, cfg: WidgetConfig): 
       <div class="stack" style="text-align:left">
         <label class="field">Destination collection</label>
         <select id="collectionSelect" class="hidden"></select>
+        <div class="row" style="margin-top:2px">
+          <input type="text" id="newCollName" placeholder="…or create a new collection" style="flex:1" />
+          <button class="btn" id="createCollBtn">Create</button>
+        </div>
+        <p class="muted-note" id="chooserStatus"></p>
       </div>
-      <div class="row" style="justify-content:center;gap:8px;margin-top:16px">
+      <div class="row" style="justify-content:center;gap:8px;margin-top:12px">
         <button class="btn ghost" id="cancelBtn">Cancel</button>
         <button class="btn primary" id="confirmUpload" disabled>Upload &amp; add to collection</button>
       </div>`;

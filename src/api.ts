@@ -133,23 +133,36 @@ export async function uploadMedia(
 // the UI for now; a backend proxy → a real translation provider (DeepL/Azure/Google)
 // is the sustainable path if/when auto-translation is needed.
 
-/** Register the uploaded medium into the File Manager, then add it to a collection. */
+/**
+ * Add an uploaded medium to a collection.
+ * The separate `PUT /medialibrary/entries/{id}` "register" step is NOT required by
+ * the spec (collection-add only needs the file id) and was failing with a 40308
+ * ownership denial, so we add the medium directly. The token must have admin access
+ * to the collection — guaranteed if the token created it (see createCollection).
+ */
 export async function addToCollection(
   cfg: ApiConfig,
   collectionId: string,
   mediumId: string
 ): Promise<void> {
-  const reg = await fetch(`${cfg.baseUrl}/medialibrary/entries/${mediumId}`, {
-    method: "PUT",
-    headers: authHeaders(cfg.token),
-  });
-  // 204 No Content on success; treat any 2xx as ok.
-  await ensureOk(reg, "Registering media");
-
   const add = await fetch(`${cfg.baseUrl}/medialibrary/collections/${collectionId}/entries`, {
     method: "POST",
     headers: { ...authHeaders(cfg.token), "Content-Type": "application/json" },
     body: JSON.stringify({ entries: [mediumId] }),
   });
   await ensureOk(add, "Adding to collection");
+}
+
+/**
+ * Create a new File Manager collection. The creating token is auto-added to the
+ * collection's adminIds/accessorIds, so it's guaranteed to be writable by that token.
+ */
+export async function createCollection(cfg: ApiConfig, name: string): Promise<Collection> {
+  const res = await fetch(`${cfg.baseUrl}/medialibrary/collections`, {
+    method: "POST",
+    headers: { ...authHeaders(cfg.token), "Content-Type": "application/json" },
+    body: JSON.stringify({ name }),
+  });
+  const data = await readJson(res, "Creating collection");
+  return { id: data.id, name: data.name };
 }

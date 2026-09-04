@@ -96,10 +96,16 @@ whichever is active is what **Download PNG** / **Publish** exports (filename suf
 
 | Step | Method & path |
 |---|---|
-| List collections | `GET /medialibrary/collections?limit=200` |
+| List collections | `GET /medialibrary/collections?limit=200` (falls back to `…/all`) |
+| Create collection (optional) | `POST /medialibrary/collections` `{ name }` |
 | Upload image | `POST /media` (multipart: `file` + `metadata`) |
-| Register medium | `PUT /medialibrary/entries/{mediumId}` |
-| Add to collection | `POST /medialibrary/collections/{collectionId}/entries` |
+| Add to collection | `POST /medialibrary/collections/{collectionId}/entries` `{ entries: [mediumId] }` |
+
+> The separate `PUT /medialibrary/entries/{mediumId}` "register" step is **not** used — the
+> spec doesn't require it and it was failing with a 40308 ownership denial. The medium is added
+> straight to the collection. The token must have **admin access to the target collection**;
+> creating a collection with that token (the "create new collection" option in the Publish
+> dialog) auto-grants it, guaranteeing the add succeeds.
 
 ## ⚠️ Security: the token is NOT secret at runtime
 
